@@ -1015,7 +1015,7 @@ void printHash(stHash *hash) {
 }
 void testHomologyOnColumn(char **mat, uint64_t c, uint64_t numSeqs, bool *legitRows, char **names,
                           stSortedSet *sampledPairs, stSet *positivePairs, mafLine_t **mlArray,
-                          uint64_t *allPositions, stHash *intervalsHash, uint64_t near) {
+                          uint64_t *allPositions, uint64_t near) {
     /* For a given column,
        1) hash all the positions in the column
        2) For each position in the hash:
@@ -1092,7 +1092,7 @@ void printAllStrandInts(int *allStrandInts, mafBlock_t *mb) {
     printf("]\n");
 }
 void walkBlockTestingHomology(mafBlock_t *mb, stSortedSet *sampledPairs, stSet *positivePairs,
-                              stSet *legitSequences, stHash *intervalsHash, uint64_t near) {
+                              stSet *legitSequences, uint64_t near) {
     uint64_t numSeqs = maf_mafBlock_getNumberOfSequences(mb);
     if (numSeqs < 2) {
         return;
@@ -1110,7 +1110,7 @@ void walkBlockTestingHomology(mafBlock_t *mb, stSortedSet *sampledPairs, stSet *
     int *allStrandInts = maf_mafBlock_getStrandIntArray(mb);
     for (uint64_t c = 0; c < seqFieldLength; ++c) {
         testHomologyOnColumn(mat, c, numSeqs, legitRows, names, sampledPairs, positivePairs,
-                             mlArray, allPositions, intervalsHash, near);
+                             mlArray, allPositions, near);
         updatePositions(mat, c, allPositions, allStrandInts, numSeqs);
     }
     // clean up
@@ -1125,11 +1125,11 @@ void walkBlockTestingHomology(mafBlock_t *mb, stSortedSet *sampledPairs, stSet *
     free(legitRows);
 }
 void performHomologyTests(const char *filename, stSortedSet *sampledPairs, stSet *positivePairs,
-                          stSet *legitSequences, stHash *intervalsHash, uint64_t near) {
+                          stSet *legitSequences, uint64_t near) {
     mafFileApi_t *mfa = maf_newMfa(filename, "r");
     mafBlock_t *mb = NULL;
     while ((mb = maf_readBlock(mfa)) != NULL) {
-        walkBlockTestingHomology(mb, sampledPairs, positivePairs, legitSequences, intervalsHash, near);
+        walkBlockTestingHomology(mb, sampledPairs, positivePairs, legitSequences, near);
         maf_destroyMafBlockList(mb);
     }
     // clean up
@@ -1284,7 +1284,7 @@ stSortedSet *compareMAFs_AB(const char *mafFileA, const char *mafFileB, uint64_t
     }
     // perform homology tests on mafFileB using sampled pairs from mafFileA
     stSet *positivePairs = stSet_construct(); // comparison by pointer
-    performHomologyTests(mafFileB, pairs, positivePairs, legitSequences, intervalsHash, options->near);
+    performHomologyTests(mafFileB, pairs, positivePairs, legitSequences, options->near);
     stSortedSet *resultPairs = stSortedSet_construct3((int(*)(const void *, const void *)) aPair_cmpFunction_seqsOnly, (void(*)(void *)) aPair_destruct);
     enumerateHomologyResults(pairs, resultPairs, intervalsHash, positivePairs, wigglePairHash, isAtoB,
                              options->wiggleBinLength);

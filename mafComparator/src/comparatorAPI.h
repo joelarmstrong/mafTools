@@ -176,12 +176,12 @@ void samplePairsFromColumnNaive(char **mat, uint64_t c, bool *legitRows, double 
                                 char **nameArray, uint64_t *positions, uint64_t numSeqs,
                                 uint64_t numPairs);
 void walkBlockTestingHomology(mafBlock_t *mb, stSortedSet *sampledPairs, stSet *positivePairs,
-                              stSet *legitSequences, stHash *intervalsHash, uint64_t near);
+                              stSet *legitSequences, uint64_t near);
 void testHomologyOnColumn(char **mat, uint64_t c, uint64_t numSeqs, bool *legitRows, char **names,
                           stSortedSet *sampledPairs, stSet *positivePairs, mafLine_t **mlArray,
-                          uint64_t *allPositions, stHash *intervalsHash, uint64_t near);
+                          uint64_t *allPositions, uint64_t near);
 void performHomologyTests(const char *filename, stSortedSet *sampledPairs, stSet *positivePairs,
-                          stSet *legitSequences, stHash *intervalsHash, uint64_t near);
+                          stSet *legitSequences, uint64_t near);
 void homologyTests1(APair *thisPair, stHash *intervalsHash, stSortedSet *pairs,
                     stSet *positivePairs, stSet *legitPairs, int64_t near);
 void enumerateHomologyResults(stSortedSet *sampledPairs, stSortedSet *resultPairs, stHash *intervalsHash,
