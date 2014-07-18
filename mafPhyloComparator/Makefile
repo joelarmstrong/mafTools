@@ -1,6 +1,6 @@
-include ../include.mk
+include ../inc/common.mk
 binPath = ../bin
-extraAPI = ../include/sharedMaf.o ../external/CuTest.a ../include/common.o ../mafComparator/src/comparatorAPI.o ../mafComparator/src/comparatorRandom.o ${sonLibPath}/sonLib.a
+extraAPI = src/blockTree.o src/coalescences.o ../lib/sharedMaf.o ../external/CuTest.a ../lib/common.o ../mafComparator/src/comparatorAPI.o ../mafComparator/src/comparatorRandom.o ${sonLibPath}/sonLib.a
 progs = $(foreach f, mafPhyloComparator, ${binPath}/$f)
 
 # TODO: do this properly
@@ -14,7 +14,7 @@ ${binPath}/%: src/%.c ${extraAPI}
 	mv $@.tmp $@
 
 %.o: %.c %.h
-	${cxx} -c $< -o $@.tmp ${cflags}
+	${cxx} -c $< -o $@.tmp ${cflags} ${extraIncFlags}
 	mv $@.tmp $@
 
 clean:

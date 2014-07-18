@@ -27,7 +27,7 @@ jpl_flags = -Wshadow -Wpointer-arith -Wstrict-prototypes -Wmissing-prototypes
 cflags_opt = -O3 -Wall -Werror --pedantic -funroll-loops ${jpl_flags}
 
 #Debug flags (slow)
-cflags_dbg = -Wall -Werror --pedantic -g -fno-inline -DBEN_DEBUG ${jpl_flags}
+cflags_dbg = -O0 -Wall -Werror --pedantic -g -fno-inline -DBEN_DEBUG ${jpl_flags}
 
 #Ultra Debug flags (really slow)
 cflags_ultraDbg = -Wall -Werror --pedantic -g -fno-inline -DBEN_DEBUG -BEN_ULTRA_DEBUG
@@ -38,7 +38,7 @@ cflags_prof = -Wall -Werror --pedantic -pg -O3 -g
 sonLibPath = ../../sonLib/lib
 
 #Flags to use
-cflags = ${cflags_opt} -I ${sonLibPath} -I ../inc -I ../external
+cflags = ${cflags_dbg} -I ${sonLibPath} -I ../inc -I ../external
 testFlags = -O0 -g -Wall -Werror --pedantic -I ${sonLibPath} -I ../inc -I ../external
 #cflags = ${cflags_dbg}
 

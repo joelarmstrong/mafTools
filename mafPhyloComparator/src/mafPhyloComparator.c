@@ -32,11 +32,12 @@
 #include "common.h"
 #include "sharedMaf.h"
 #include "comparatorAPI.h"
+#include "coalescences.h"
+#include "blockTree.h"
 #include "mafPhyloComparator.h"
 
 void parseOpts(int argc, char **argv, PhyloOptions *opts);
-char *parseTreeFromBlockStart(mafLine_t *line);
-void sampleCoalescences(char *mafFileName, stSet *coalescences, double acceptProbability, stSet *legitSequences, stHash *sequenceLengthHash);
+void phyloOptions_destruct(PhyloOptions *opts);
 void getLegitSequencesAndLengths(PhyloOptions *opts, stSet *legitSequences, stHash *sequenceLengthHash);
 
 void parseOpts(int argc, char *argv[], PhyloOptions *opts) {
@@ -46,6 +47,8 @@ void parseOpts(int argc, char *argv[], PhyloOptions *opts) {
         {"mafFile2", required_argument, NULL, 0},
         {"logLevel", required_argument, NULL, 0},
         {"numSamples", required_argument, NULL, 0},
+        {"speciesTree", required_argument, NULL, 0},
+        {"out", required_argument, NULL, 0},
         {0, 0, 0, 0}
     };
     int longindex;
@@ -60,9 +63,13 @@ void parseOpts(int argc, char *argv[], PhyloOptions *opts) {
         } else if (strcmp(optName, "numSamples") == 0) {
             int64_t intArg;
             int ret;
-            ret = sscanf("%" PRIi64, optarg, &intArg);
+            ret = sscanf(optarg, "%" PRIi64, &intArg);
             assert(ret == 1);
             opts->numSamples = intArg;
+        } else if (strcmp(optName, "speciesTree") == 0) {
+            opts->speciesTree = stTree_parseNewickString(optarg);
+        } else if (strcmp(optName, "out") == 0) {
+            opts->outFile = stString_copy(optarg);
         }
     }
     if (opts->mafFile1 == NULL) {
@@ -71,182 +78,69 @@ void parseOpts(int argc, char *argv[], PhyloOptions *opts) {
     if (opts->mafFile2 == NULL) {
         st_errAbort("--mafFile2 must be specified");        
     }
+    if (opts->speciesTree == NULL) {
+        st_errAbort("--speciesTree is required (in newick format)");
+    }
     if (opts->numSamples == 0) {
         opts->numSamples = 1000000;
     }
 }
 
-// Get the gene tree from the block start. If there is no species
-// tree in the line, raise an error.
-// Trees (at least for now) must be quoted.
-char *parseTreeFromBlockStart(mafLine_t *line) {
-    // FIXME: super sloppy
-    char *lineString = maf_mafLine_getLine(line);
-    char **linePtr = &lineString;
-    char *tok = de_strtok(linePtr, ' ');
-    bool inTreeString = false, seenTree = false;
-    stList *treeTokens = stList_construct3(0, free);
-    while (tok != NULL) {
-        if (strncmp(tok, "tree=", 5) == 0) {
-            // Found a tree start
-            seenTree = true;
-            if (tok[5] != '"') {
-                st_errAbort("Maf block at line %d contains a tree parameter, but it is not enclosed in quotes.\n", maf_mafLine_getLineNumber(line));
-            }
-            stList_append(treeTokens, stString_copy(tok + 6));
-        } else if (inTreeString) {
-            int64_t len = strlen(tok);
-            if (tok[len - 1] == '"') {
-                inTreeString = false;
-            }
-            stList_append(treeTokens, stString_copy(tok));
-        }
-        free(tok);
-        tok = de_strtok(linePtr, ' ');
-    }
-    if (inTreeString) {
-        st_errAbort("Maf block start at line %d has a partially "
-                    "quoted tree string.\n",
-                    maf_mafLine_getLineNumber(line));
-    }
-    if (!seenTree) {
-        st_errAbort("Maf block start at line %d does not contain a "
-                    "tree. mafPhyloComparator requires a tree for "
-                    "all blocks.\n", maf_mafLine_getLineNumber(line));
-    }
-
-    char *newick = stString_join2(" ", treeTokens);
-    stList_destruct(treeTokens);
-    return newick;
-}
-
-// Will be super slow. TODO: speed up by including useful info in the
-// clientdata field.
-stTree *getMRCA(stTree *node1, stTree *node2) {
-    
-}
-
-// Get a set of coalescences from a set of APairs given a gene tree.
-void coalescencesFromPairs(stTree *tree, stSortedSet *pairs, stHash *intervalToNode, stSet *coalescences) {
-
-    stSortedSet *pairsIt = stSortedSet_getIterator(pairs);    
-}
-
-// For use in a set containing rows from only one sequence, so
-// comparing sequence strings is not necessary.
-int BlockRow_cmp(BlockRow *row1, BlockRow *row2) {
-    assert(strcmp(row1->seq, row2->seq) == 0);
-    if (row2->start > row1->start) {
-        assert(row2->start >= row1->end); // Intervals should never overlap.
-        assert(row2->end > row1->end);
-        return 1;
-    } else if (row2->start == row1->start) {
-        return 0;
-    } else {
-        assert(row1->start >= row2->end); // Intervals should never overlap.
-        assert(row1->end > row2->end);
-        return -1;
-    }
-}
-
-stTree *getNodeFromPosition(stHash *seqToBlockRows, const char *seq, uint64_t pos) {
-    stSortedSet *blockRows = stHash_search(seqToBlockRows, seq);
-    if (blockRows == NULL) {
-        return NULL;
-    }
-
-    // Need to allocate a fake interval to search for an interval
-    // containing the position. Pretty hacky.
-    BlockRow *tmp = st_malloc(1, sizeof(BlockRow));
-    tmp->seq = seq;
-    tmp->start = pos;
-    tmp->end = pos + 1;
-    BlockRow *blockRow = stSortedSet_searchLessThanOrEqual(blockRows, tmp);
-    free(tmp);
-    if (blockRow->end > pos) {
-        // Found a block row with an interval containing this position.
-        return blockRow;
-    } else {
-        return NULL;
-    }
-}
-
-// Get a hash from seq -> stSortedSet that contains BlockRow
-// structs. (kind of a poor man's map so that intervals can be mapped
-// to tree nodes.)
-stHash *getBlockRows(mafBlock_t *block, stTree *tree) {
-    stHash *ret = stHash_construct3(stHash_stringKey, stHash_stringEqualKey, free, (void(*)(void *)) stSortedSet_destruct);
-    // Walk through the block and assign rows to nodes in a post-order fashion.
-    
-    return ret;
-}
-
-// Walk through the given maf file, sampling pairs and recording where
-// in the tree they coalesce.
-void sampleCoalescences(char *mafFileName, stSet *coalescences, double acceptProbability, stSet *legitSequences, stHash *sequenceLengthHash) {
-    mafFileApi_t *mafFile = maf_newMfa(mafFileName, "r");
-    uint64_t *chooseTwoArray = buildChooseTwoArray();
-    mafBlock_t *block;
-    while ((block = maf_readBlock(mafFile)) != NULL) {
-        // Parse out tree header
-        mafLine_t *line = maf_mafBlock_getHeadLine(block);
-        if(maf_mafLine_getType(line) == 'h') {
-            // header line, we should just skip this block
-            maf_destroyMafBlockList(block);
-            continue;
-        }
-        assert(maf_mafLine_getType(line) == 'a');
-
-        // Tree stuff
-        char *newickString = parseTreeFromBlockStart(line);
-        st_logDebug("Got gene tree %s from block\n", newickString);
-        stTree *tree = stTree_parseNewickString(newickString);
-        stHash *intervalToNode = getIntervalToNode(block, tree);
-
-        // Use existing mafComparator api to get pairs
-        stSortedSet *pairs = stSortedSet_construct3((int(*)(const void *, const void *)) aPair_cmpFunction, (void(*)(void *)) aPair_destruct);
-        uint64_t numPairs = 0;
-        walkBlockSamplingPairs(mafFileName, block, pairs, acceptProbability, legitSequences, chooseTwoArray, &numPairs, sequenceLengthHash);
-        st_logDebug("Sampled %d pairs from block\n", numPairs);
-
-        coalescencesFromPairs(tree, pairs, intervalToNode, coalescences);
-
-        stSortedSet_destruct(pairs);
-        maf_destroyMafBlockList(block);
-    }
-    maf_destroyMfa(mafFile);
+void phyloOptions_destruct(PhyloOptions *opts) {
+    free(opts->mafFile1);
+    free(opts->mafFile2);
+    free(opts->outFile);
+    stTree_destruct(opts->speciesTree);
+    free(opts);
 }
 
 // Use the mafComparator API to build the legitSequences set and
 // length hash -- but it expects a different options structure.
 void getLegitSequencesAndLengths(PhyloOptions *opts, stSet *legitSequences, stHash *sequenceLengthHash) {
     Options *comparatorOpts = options_construct();
-    comparatorOpts->mafFile1 = opts->mafFile1;
-    comparatorOpts->mafFile2 = opts->mafFile2;
+    comparatorOpts->mafFile1 = stString_copy(opts->mafFile1);
+    comparatorOpts->mafFile2 = stString_copy(opts->mafFile2);
     buildSeqNamesSet(comparatorOpts, legitSequences, sequenceLengthHash);
     options_destruct(comparatorOpts);
+}
+
+// Check the species tree and exit and complain if it's invalid.
+// All nodes must be labeled and there can be no duplicate names.
+static void checkSpeciesTree(stTree *tree) {
+    stSet *seen = stSet_construct3(stHash_stringKey, stHash_stringEqualKey, free);
+    stList *nodes = stList_construct();
+    fillListByReversePostOrder(tree, nodes);
+    for (int64_t i = 0; i < stList_length(nodes); i++) {
+        stTree *node = stList_get(nodes, i);
+        if (stTree_getLabel(node) == NULL) {
+            st_errAbort("All nodes in the species tree must be labeled.\n");
+        }
+        if (stSet_search(seen, (char *) stTree_getLabel(node))) {
+            st_errAbort("Duplicate node found in species tree: %s", stTree_getLabel(node));
+        }
+        stSet_insert(seen, stString_copy(stTree_getLabel(node)));
+    }
+
+    stList_destruct(nodes);
+    stSet_destruct(seen);
 }
 
 int main(int argc, char *argv[]) {
     PhyloOptions *opts = st_calloc(1, sizeof(PhyloOptions));
     parseOpts(argc, argv, opts);
+    checkSpeciesTree(opts->speciesTree);
 
     // TODO: verify that the MAF has a tree for each block and the
     // tree is the format we need?
+    st_logDebug("Getting legit sequences and lengths\n");
     stHash *sequenceLengthHash = stHash_construct3(stHash_stringKey, stHash_stringEqualKey, free, free);
     stSet *legitSequences = stSet_construct3(stHash_stringKey, stHash_stringEqualKey, free);
     getLegitSequencesAndLengths(opts, legitSequences, sequenceLengthHash);
 
-    // Sample coalescences from the MAF (a pair of sequences from a
-    // block and what genome they coalesce in)
-    st_logInfo("Sampling coalescences\n");
-    stSet *coalescences = stSet_construct();
-    double acceptProbability = opts->numSamples / countPairsInMaf(opts->mafFile1, legitSequences);
-    sampleCoalescences(opts->mafFile1, coalescences, acceptProbability, legitSequences, sequenceLengthHash);
+    compareMAFCoalescences(opts, legitSequences, sequenceLengthHash);
 
-    /* findMatchingCoalescences(mafFile2, coalescences, matchedCoalescences); */
-
-    /* scoreMatchedCoalescences(coalescences, matchedCoalescences); */
-
-    free(opts);
+    // Clean up.
+    phyloOptions_destruct(opts);
+    stHash_destruct(sequenceLengthHash);
+    stSet_destruct(legitSequences);
 }

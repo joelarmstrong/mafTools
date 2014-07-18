@@ -4,7 +4,7 @@ include ../inc/common.mk
 .PHONY: all clean test
 
 cc = gcc
-args = -std=c99 -O3 -Wextra -Wall -Werror -pedantic -I ../external/ -I ../inc/
+args = -std=c99 -O0 -g -fno-inline -Wextra -Wall -Werror -pedantic -I ../external/ -I ../inc/
 inc = ../inc
 
 objects = common.o sharedMaf.o ../external/CuTest.a
@@ -17,25 +17,25 @@ clean:
 
 allTests: allTests.c ${inc}/test.sharedMaf.h test.sharedMaf.c ${testObjects}
 	mkdir -p test
-	${cc} -g -O0 ${args} allTests.c test.sharedMaf.c ${testObjects} -o $@.tmp ${lm}
+	${cc} -g -fno-inline -O0 -g -fno-inline ${args} allTests.c test.sharedMaf.c ${testObjects} -o $@.tmp ${lm}
 	mv $@.tmp $@
 
 %.o: %.c ${inc}/%.h
-	${cc} -O3 -c ${args} $< -o $@.tmp
+	${cc} -O0 -g -fno-inline -c ${args} $< -o $@.tmp
 	mv $@.tmp $@
 
 sharedMaf.o: sharedMaf.c ${inc}/sharedMaf.h
-	${cc} -O3 -c ${args} sharedMaf.c -o $@.tmp ${lm}
+	${cc} -O0 -g -fno-inline -c ${args} sharedMaf.c -o $@.tmp ${lm}
 	mv $@.tmp $@
 
 test/%.o: %.c ${inc}/%.h
 	mkdir -p $(dir $@)
-	${cc} -g -O0 -c ${args} $< -o $*.tmp ${lm}
+	${cc} -g -fno-inline -O0 -g -fno-inline -c ${args} $< -o $*.tmp ${lm}
 	mv $*.tmp $@
 
 test/sharedMaf.o: sharedMaf.c ${inc}/sharedMaf.h
 	mkdir -p $(dir $@)
-	${cc} -g -O0 -c ${args} sharedMaf.c -o $@.tmp ${lm}
+	${cc} -g -fno-inline -O0 -g -fno-inline -c ${args} sharedMaf.c -o $@.tmp ${lm}
 	mv $@.tmp $@
 
 test: allTests
