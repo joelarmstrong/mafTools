@@ -1,5 +1,7 @@
 #ifndef __MAFPHYLOCOMPARATOR_H_
 #define __MAFPHYLOCOMPARATOR_H_
+#include "sonLib.h"
+
 typedef struct {
     char *mafFile1;
     char *mafFile2;

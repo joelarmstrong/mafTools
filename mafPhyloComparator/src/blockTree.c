@@ -47,11 +47,19 @@ char *parseTreeFromBlockStart(mafLine_t *line) {
             if (tok[5] != '"') {
                 st_errAbort("Maf block at line %d contains a tree parameter, but it is not enclosed in quotes.\n", maf_mafLine_getLineNumber(line));
             }
+            inTreeString = true;
+
+            int64_t len = strlen(tok);
+            if (tok[len - 1] == '"') {
+                inTreeString = false;
+                tok [len - 1] = '\0';
+            }
             stList_append(treeTokens, stString_copy(tok + 6));
         } else if (inTreeString) {
             int64_t len = strlen(tok);
             if (tok[len - 1] == '"') {
                 inTreeString = false;
+                tok[len - 1] = '\0';
             }
             stList_append(treeTokens, stString_copy(tok));
         }
@@ -133,6 +141,9 @@ stTree *getNodeFromPosition(stHash *seqToBlockRows, const char *seq, uint64_t po
     BlockRow *blockRow = stSortedSet_searchLessThanOrEqual(blockRows, tmp);
     free(tmp->species);
     free(tmp);
+    if (blockRow == NULL) {
+        return NULL;
+    }
     if (blockRow->end > pos) {
         // Found a block row with an interval containing this position.
         return blockRow->node;
