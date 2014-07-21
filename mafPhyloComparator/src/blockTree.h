@@ -18,8 +18,8 @@ stTree *getMRCA(stTree *node1, stTree *node2);
 stTree *getNodeFromPosition(stHash *seqToBlockRows, const char *seq, uint64_t pos);
 int BlockRow_cmp(const BlockRow *row1, const BlockRow *row2);
 void BlockRow_destruct(BlockRow *row);
-void fillListByReversePostOrder(stTree *tree, stList *list);
-stHash *getSeqToBlockRows(mafBlock_t *block, stTree *tree);
+void fillListByReversePostOrder(stTree *tree, stList *list, bool onlyLeaves);
+stHash *getSeqToBlockRows(mafBlock_t *block, stTree *tree, bool onlyLeaves);
 stHash *buildNameToNodeHash(stTree *tree);
 bool isAncestor(char *name1, char *name2, stHash *nameToNode);
 

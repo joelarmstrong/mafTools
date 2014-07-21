@@ -156,23 +156,27 @@ stTree *getNodeFromPosition(stHash *seqToBlockRows, const char *seq, uint64_t po
 // fill by reversed post-order (i.e. pre-order with the order we visit
 // the children in reversed), so we can pop off the end of the list
 // rather than the start.
-void fillListByReversePostOrder(stTree *tree, stList *list) {
-    stList_append(list, tree);
+void fillListByReversePostOrder(stTree *tree, stList *list, bool onlyLeaves) {
+    if (!onlyLeaves || stTree_getChildNumber(tree) == 0) {
+        stList_append(list, tree);
+    }
     for (int64_t i = stTree_getChildNumber(tree) - 1; i >= 0; i--) {
-        fillListByReversePostOrder(stTree_getChild(tree, i), list);
+        fillListByReversePostOrder(stTree_getChild(tree, i), list, onlyLeaves);
     }
 }
 
 // Get a hash from seq -> stSortedSet that contains BlockRow
 // structs. (kind of a poor man's map so that intervals can be mapped
-// to tree nodes.)
-// The tree should correspond to the rows in the block in post-order.
-stHash *getSeqToBlockRows(mafBlock_t *block, stTree *tree) {
+// to tree nodes.)  The tree should correspond to the rows in the
+// block in post-order, using only the leaves if onlyLeaves is true,
+// otherwise ancestors must be present.
+stHash *getSeqToBlockRows(mafBlock_t *block, stTree *tree, bool onlyLeaves) {
     stHash *ret = stHash_construct3(stHash_stringKey, stHash_stringEqualKey, free, (void(*)(void *)) stSortedSet_destruct);
     // Walk through the block and assign rows to nodes in a post-order fashion.
     stList *nodes = stList_construct();
-    // Need to pop off the end of the list for efficiency reasons.
-    fillListByReversePostOrder(tree, nodes);
+    // Reverse post-order because we need to pop off the end of the
+    // list for efficiency reasons.
+    fillListByReversePostOrder(tree, nodes, onlyLeaves);
     st_logDebug("Found %" PRIi64 " species in the block tree\n", stList_length(nodes));
     mafLine_t *line = maf_mafBlock_getHeadLine(block);
     for (;;) {
@@ -204,7 +208,9 @@ stHash *getSeqToBlockRows(mafBlock_t *block, stTree *tree) {
         }
         assert(blockRow->start >= 0);
         assert(blockRow->start < blockRow->end);
-        assert(strcmp(blockRow->species, stTree_getLabel(node)) == 0);
+        if (strcmp(blockRow->species, stTree_getLabel(node)) != 0) {
+            st_errAbort("Error on maf line %" PRIu64 ": sequence header %s found, but %s expected. Check that the block is in post-order with respect to the tree, and use --onlyLeaves if there is no ancestral sequence in the MAF.", maf_mafLine_getLineNumber(line), blockRow->species, stTree_getLabel(node));
+        }
         blockRow->node = node;
         stSortedSet_insert(sortedSet, blockRow);
 
@@ -224,7 +230,7 @@ stHash *getSeqToBlockRows(mafBlock_t *block, stTree *tree) {
 stHash *buildNameToNodeHash(stTree *tree) {
     stHash *nameToNode = stHash_construct3(stHash_stringKey, stHash_stringEqualKey, free, NULL);
     stList *nodes = stList_construct();
-    fillListByReversePostOrder(tree, nodes);
+    fillListByReversePostOrder(tree, nodes, false);
     for (int64_t i = 0; i < stList_length(nodes); i++) {
         stTree *node = stList_get(nodes, i);
         assert(stHash_search(nameToNode, (char *) stTree_getLabel(node)) == NULL);

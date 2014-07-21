@@ -49,6 +49,7 @@ void parseOpts(int argc, char *argv[], PhyloOptions *opts) {
         {"numSamples", required_argument, NULL, 0},
         {"speciesTree", required_argument, NULL, 0},
         {"out", required_argument, NULL, 0},
+        {"onlyLeaves", no_argument, NULL, 0},
         {0, 0, 0, 0}
     };
     int longindex;
@@ -70,6 +71,8 @@ void parseOpts(int argc, char *argv[], PhyloOptions *opts) {
             opts->speciesTree = stTree_parseNewickString(optarg);
         } else if (strcmp(optName, "out") == 0) {
             opts->outFile = stString_copy(optarg);
+        } else if (strcmp(optName, "onlyLeaves") == 0) {
+            opts->onlyLeaves = true;
         }
     }
     if (opts->mafFile1 == NULL) {
@@ -109,7 +112,7 @@ void getLegitSequencesAndLengths(PhyloOptions *opts, stSet *legitSequences, stHa
 static void checkSpeciesTree(stTree *tree) {
     stSet *seen = stSet_construct3(stHash_stringKey, stHash_stringEqualKey, free);
     stList *nodes = stList_construct();
-    fillListByReversePostOrder(tree, nodes);
+    fillListByReversePostOrder(tree, nodes, false);
     for (int64_t i = 0; i < stList_length(nodes); i++) {
         stTree *node = stList_get(nodes, i);
         if (stTree_getLabel(node) == NULL) {
@@ -137,7 +140,7 @@ int main(int argc, char *argv[]) {
     stSet *legitSequences = stSet_construct3(stHash_stringKey, stHash_stringEqualKey, free);
     getLegitSequencesAndLengths(opts, legitSequences, sequenceLengthHash);
 
-    compareMAFCoalescences(opts, legitSequences, sequenceLengthHash);
+    compareMAFCoalescences(opts, legitSequences, sequenceLengthHash, opts->onlyLeaves);
 
     // Clean up.
     phyloOptions_destruct(opts);

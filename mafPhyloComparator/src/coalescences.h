@@ -1,6 +1,7 @@
 #ifndef __COALESCENCES_H_
 #define __COALESCENCES_H_
 #include "sonLib.h"
+#include "sharedMaf.h"
 #include "mafPhyloComparator.h"
 
 // Represents an aligned pair and where their MRCA is in the gene
@@ -25,6 +26,11 @@ typedef struct {
     uint64_t lateCoalescences; // Coalesced late in B relative to A.
 } CoalResult;
 
+int coalescence_cmp(const Coalescence *coal1, const Coalescence *coal2);
+void coalescence_destruct(Coalescence *coal);
+void coalescencesFromPairs(stSortedSet *pairs, stHash *seqToBlockRows, stSortedSet *coalescences);
+void walkBlockSamplingCoalescences(char *mafFileName, mafBlock_t *block, stSortedSet *coalescences, double acceptProbability, stSet *legitSequences, stHash *sequenceLengthHash, uint64_t *chooseTwoArray, bool onlyLeaves);
+
 // Sample, compare and report coalescences from two MAFs.
-void compareMAFCoalescences(PhyloOptions *opts, stSet *legitSequences, stHash *sequenceLengthHash);
+void compareMAFCoalescences(PhyloOptions *opts, stSet *legitSequences, stHash *sequenceLengthHash, bool onlyLeaves);
 #endif

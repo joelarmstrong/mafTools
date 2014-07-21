@@ -8,6 +8,8 @@ typedef struct {
     char *outFile;
     int64_t numSamples;
     stTree *speciesTree;
+    bool onlyLeaves; // Whether the mafs have block entries for just
+                     // the leaves or for ancestors as well.
 } PhyloOptions;
 
 #endif // __MAFPHYLOCOMPARATOR_H_

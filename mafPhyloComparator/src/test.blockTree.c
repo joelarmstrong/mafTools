@@ -87,7 +87,7 @@ static void test_getMRCA(CuTest *testCase) {
     stTree_destruct(tree);
 }
 
-static void test_getSeqToBlockRows_and_getNodeFromPosition(CuTest *testCase) {
+static void test_getSeqToBlockRows_and_getNodeFromPosition_with_ancestors(CuTest *testCase) {
     char *blockStr = "a tree=\"((a, a, b, c)d, (b, c)d)e;\"\n"
                      "s a 100 3 + 200 ggg\n"
                      "s a 197 3 - 200 ggg\n"
@@ -100,7 +100,7 @@ static void test_getSeqToBlockRows_and_getNodeFromPosition(CuTest *testCase) {
                      "s e 0 3 + 200 ggg\n";
     mafBlock_t *block = maf_newMafBlockFromString(blockStr, 0);
     stTree *tree = stTree_parseNewickString("((a,a,b,c)d, (b,c)d)e;");
-    stHash *seqToBlockRows = getSeqToBlockRows(block, tree);
+    stHash *seqToBlockRows = getSeqToBlockRows(block, tree, false);
 
     // Row 1 -- a:100-103
     stTree *node = getNodeFromPosition(seqToBlockRows, "a", 100);
@@ -165,6 +165,65 @@ static void test_getSeqToBlockRows_and_getNodeFromPosition(CuTest *testCase) {
     stHash_destruct(seqToBlockRows);
 }
 
+// Exactly the same as the test with ancestors above, except that only
+// leaves are present.
+static void test_getSeqToBlockRows_and_getNodeFromPosition_just_leaves(CuTest *testCase) {
+    char *blockStr = "a tree=\"((a, a, b, c)d, (b, c)d)e;\"\n"
+                     "s a 100 3 + 200 ggg\n"
+                     "s a 197 3 - 200 ggg\n"
+                     "s b 0 3 + 200 ggg\n"
+                     "s c 0 3 + 200 ggg\n"
+                     "s b 100 3 + 200 ggg\n"
+                     "s c 100 3 + 200 ggg\n";
+    mafBlock_t *block = maf_newMafBlockFromString(blockStr, 0);
+    stTree *tree = stTree_parseNewickString("((a,a,b,c)d, (b,c)d)e;");
+    stHash *seqToBlockRows = getSeqToBlockRows(block, tree, true);
+
+    // Row 1 -- a:100-103
+    stTree *node = getNodeFromPosition(seqToBlockRows, "a", 100);
+    CuAssertTrue(testCase, node == stTree_getChild(stTree_getChild(tree, 0), 0));
+    stTree *prevNode = node;
+    node = getNodeFromPosition(seqToBlockRows, "a", 101);
+    CuAssertTrue(testCase, node == prevNode);
+    node = getNodeFromPosition(seqToBlockRows, "a", 102);
+    CuAssertTrue(testCase, node == prevNode);
+
+    // Row 2 -- a:0-3
+    node = getNodeFromPosition(seqToBlockRows, "a", 0);
+    CuAssertTrue(testCase, node == stTree_getChild(stTree_getChild(tree, 0), 1));
+    prevNode = node;
+    node = getNodeFromPosition(seqToBlockRows, "a", 1);
+    CuAssertTrue(testCase, node == prevNode);
+    node = getNodeFromPosition(seqToBlockRows, "a", 2);
+    CuAssertTrue(testCase, node == prevNode);
+
+    // Row 3 -- b:0-3
+    node = getNodeFromPosition(seqToBlockRows, "b", 0);
+    CuAssertTrue(testCase, node == stTree_getChild(stTree_getChild(tree, 0), 2));
+    prevNode = node;
+    node = getNodeFromPosition(seqToBlockRows, "b", 1);
+    CuAssertTrue(testCase, node == prevNode);
+    node = getNodeFromPosition(seqToBlockRows, "b", 2);
+    CuAssertTrue(testCase, node == prevNode);
+
+    // Row 7 -- c:100-103
+    node = getNodeFromPosition(seqToBlockRows, "c", 100);
+    CuAssertTrue(testCase, node == stTree_getChild(stTree_getChild(tree, 1), 1));
+    prevNode = node;
+    node = getNodeFromPosition(seqToBlockRows, "c", 101);
+    CuAssertTrue(testCase, node == prevNode);
+    node = getNodeFromPosition(seqToBlockRows, "c", 102);
+    CuAssertTrue(testCase, node == prevNode);
+
+    // Not in block = NULL
+    node = getNodeFromPosition(seqToBlockRows, "e", 50);
+    CuAssertTrue(testCase, node == NULL);
+
+    maf_destroyMafBlockList(block);
+    stTree_destruct(tree);
+    stHash_destruct(seqToBlockRows);
+}
+
 static void test_buildNameToNodeHash_random(CuTest *testCase) {
     for (int64_t testNum = 0; testNum < 100; testNum++) {
         stTree *tree = getRandomTree(3);
@@ -198,7 +257,8 @@ CuSuite *blockTree_TestSuite(void) {
     SUITE_ADD_TEST(suite, test_parseTreeFromBlockStart);
     SUITE_ADD_TEST(suite, test_parseTreeFromBlockStart_random);
     SUITE_ADD_TEST(suite, test_getMRCA);
-    SUITE_ADD_TEST(suite, test_getSeqToBlockRows_and_getNodeFromPosition);
+    SUITE_ADD_TEST(suite, test_getSeqToBlockRows_and_getNodeFromPosition_with_ancestors);
+    SUITE_ADD_TEST(suite, test_getSeqToBlockRows_and_getNodeFromPosition_just_leaves);
     SUITE_ADD_TEST(suite, test_buildNameToNodeHash_random);
     SUITE_ADD_TEST(suite, test_isAncestor);
     return suite;

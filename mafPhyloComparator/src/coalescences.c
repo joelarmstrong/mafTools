@@ -33,23 +33,21 @@
 #include "mafPhyloComparator.h"
 #include "coalescences.h"
 
-static void coalescencesFromPairs(stTree *tree, stSortedSet *pairs, stHash *seqToBlockRows, stSortedSet *coalescences);
-static void sampleCoalescences(char *mafFileName, stSortedSet *coalescences, double acceptProbability, stSet *legitSequences, stHash *sequenceLengthHash);
+static void sampleCoalescences(char *mafFileName, stSortedSet *coalescences, double acceptProbability, stSet *legitSequences, stHash *sequenceLengthHash, bool onlyLeaves);
 static stSortedSet *sortedSetFromSet(stSet *set);
 static stSortedSet *pairsFromCoalescences(stSortedSet *coalescences);
-static stSortedSet *findMatchingCoalescences(char *mafFileName, stSortedSet *coalescences, stSet *legitSequences);
-static int coalescence_cmp(const Coalescence *coal1, const Coalescence *coal2);
-static void coalescence_destruct(Coalescence *coal);
+static stSortedSet *findMatchingCoalescences(char *mafFileName, stSortedSet *coalescences, stSet *legitSequences, bool onlyLeaves);
 static CoalResult *coalResult_init(const char *seq);
 static void coalResult_destruct(CoalResult *coalResult);
 static CoalResult *getResultForSequence(stHash *seqResultsHash, char *seq);
 static void buildCoalescenceResults(stSortedSet *sampledCoalescences, stSortedSet *matchedCoalescences, stTree *speciesTree, CoalResult *aggregateResults, stHash *seqResults);
 static void reportCoalescenceResult(const char *tag, CoalResult *result, FILE *f);
 static void reportCoalescenceResults(CoalResult *aggregateResults, stHash *seqResults, const char *mafFile1, const char *mafFile2, FILE *f);
+
 // Get a set of coalescences from a sorted set of APairs given a gene
 // tree.
-static void coalescencesFromPairs(stTree *tree, stSortedSet *pairs, stHash *seqToBlockRows, stSortedSet *coalescences) {
-    stSortedSetIterator *pairsIt = stSortedSet_getIterator(pairs);    
+void coalescencesFromPairs(stSortedSet *pairs, stHash *seqToBlockRows, stSortedSet *coalescences) {
+    stSortedSetIterator *pairsIt = stSortedSet_getIterator(pairs);
     APair *pair;
     while ((pair = stSortedSet_getNext(pairsIt)) != NULL) {
         Coalescence *coalescence = st_malloc(sizeof(Coalescence));
@@ -61,47 +59,51 @@ static void coalescencesFromPairs(stTree *tree, stSortedSet *pairs, stHash *seqT
         coalescence->seq2 = stString_copy(pair->seq2);
         coalescence->pos2 = pair->pos2;
         coalescence->mrca = stString_copy(stTree_getLabel(mrca));
-        st_logDebug("Found coalescence %s:%" PRIi64 " <-%s-> %s:%" PRIi64 "\n", coalescence->seq1, coalescence->pos1, coalescence->mrca, coalescence->seq2, coalescence->pos2);
         stSortedSet_insert(coalescences, coalescence);
     }
 
     stSortedSet_destructIterator(pairsIt);
 }
 
+// Sample coalescences from a block.
+void walkBlockSamplingCoalescences(char *mafFileName, mafBlock_t *block, stSortedSet *coalescences, double acceptProbability, stSet *legitSequences, stHash *sequenceLengthHash, uint64_t *chooseTwoArray, bool onlyLeaves) {
+    // Parse out tree header
+    mafLine_t *line = maf_mafBlock_getHeadLine(block);
+    assert(maf_mafLine_getType(line) == 'a');
+    char *newickString = parseTreeFromBlockStart(line);
+    st_logDebug("Got gene tree %s from block\n", newickString);
+    stTree *tree = stTree_parseNewickString(newickString);
+    stHash *seqToBlockRows = getSeqToBlockRows(block, tree, onlyLeaves);
+
+    // Use existing mafComparator api to get pairs
+    stSortedSet *pairs = stSortedSet_construct3((int(*)(const void *, const void *)) aPair_cmpFunction, (void(*)(void *)) aPair_destruct);
+    uint64_t numPairs = 0;
+    walkBlockSamplingPairs(mafFileName, block, pairs, acceptProbability, legitSequences, chooseTwoArray, &numPairs, sequenceLengthHash);
+    st_logDebug("Sampled %" PRIi64 " of %" PRIi64 " pairs from block\n", stSortedSet_size(pairs), numPairs);
+
+    coalescencesFromPairs(pairs, seqToBlockRows, coalescences);
+
+    free(newickString);
+    stTree_destruct(tree);
+    stHash_destruct(seqToBlockRows);
+    stSortedSet_destruct(pairs);    
+}
+
 // Walk through the given maf file, sampling pairs and recording where
 // in the tree they coalesce.
-static void sampleCoalescences(char *mafFileName, stSortedSet *coalescences, double acceptProbability, stSet *legitSequences, stHash *sequenceLengthHash) {
+static void sampleCoalescences(char *mafFileName, stSortedSet *coalescences, double acceptProbability, stSet *legitSequences, stHash *sequenceLengthHash, bool onlyLeaves) {
     mafFileApi_t *mafFile = maf_newMfa(mafFileName, "r");
     uint64_t *chooseTwoArray = buildChooseTwoArray();
     mafBlock_t *block;
     while ((block = maf_readBlock(mafFile)) != NULL) {
-        // Parse out tree header
         mafLine_t *line = maf_mafBlock_getHeadLine(block);
-        if(maf_mafLine_getType(line) == 'h') {
+        if (maf_mafLine_getType(line) == 'h') {
             // header line, we should just skip this block
             maf_destroyMafBlockList(block);
             continue;
         }
-        assert(maf_mafLine_getType(line) == 'a');
 
-        // Tree stuff
-        char *newickString = parseTreeFromBlockStart(line);
-        st_logDebug("Got gene tree %s from block\n", newickString);
-        stTree *tree = stTree_parseNewickString(newickString);
-        stHash *seqToBlockRows = getSeqToBlockRows(block, tree);
-
-        // Use existing mafComparator api to get pairs
-        stSortedSet *pairs = stSortedSet_construct3((int(*)(const void *, const void *)) aPair_cmpFunction, (void(*)(void *)) aPair_destruct);
-        uint64_t numPairs = 0;
-        walkBlockSamplingPairs(mafFileName, block, pairs, acceptProbability, legitSequences, chooseTwoArray, &numPairs, sequenceLengthHash);
-        st_logDebug("Sampled %" PRIi64 " of %" PRIi64 " pairs from block\n", stSortedSet_size(pairs), numPairs);
-
-        coalescencesFromPairs(tree, pairs, seqToBlockRows, coalescences);
-
-        free(newickString);
-        stTree_destruct(tree);
-        stHash_destruct(seqToBlockRows);
-        stSortedSet_destruct(pairs);
+        walkBlockSamplingCoalescences(mafFileName, block, coalescences, acceptProbability, legitSequences, sequenceLengthHash, chooseTwoArray, onlyLeaves);
         maf_destroyMafBlockList(block);
     }
 
@@ -138,7 +140,7 @@ static stSortedSet *pairsFromCoalescences(stSortedSet *coalescences) {
     return ret;
 }
 
-static stSortedSet *findMatchingCoalescences(char *mafFileName, stSortedSet *coalescences, stSet *legitSequences) {
+static stSortedSet *findMatchingCoalescences(char *mafFileName, stSortedSet *coalescences, stSet *legitSequences, bool onlyLeaves) {
     stSortedSet *matchingCoalescences = stSortedSet_construct3((int (*)(const void *, const void *)) coalescence_cmp, (void (*)(void *)) coalescence_destruct);
 
     // Get aPairs from the sampled coalescences.
@@ -164,7 +166,7 @@ static stSortedSet *findMatchingCoalescences(char *mafFileName, stSortedSet *coa
         // Get the tree
         char *newickString = parseTreeFromBlockStart(line);
         stTree *blockTree = stTree_parseNewickString(newickString);
-        stHash *seqToBlockRows = getSeqToBlockRows(block, blockTree);
+        stHash *seqToBlockRows = getSeqToBlockRows(block, blockTree, onlyLeaves);
 
         // Change from a set of positive pairs to a sorted set. NB:
         // this isn't really necessary, it's just to make the types
@@ -173,7 +175,7 @@ static stSortedSet *findMatchingCoalescences(char *mafFileName, stSortedSet *coa
         // versions.
         stSortedSet *matchingBlockPairsSorted = sortedSetFromSet(matchingBlockPairs);
 
-        coalescencesFromPairs(blockTree, matchingBlockPairsSorted,
+        coalescencesFromPairs(matchingBlockPairsSorted,
                               seqToBlockRows, matchingCoalescences);
 
         free(newickString);
@@ -192,7 +194,7 @@ static stSortedSet *findMatchingCoalescences(char *mafFileName, stSortedSet *coa
 
 // Compare two coalescences, by comparing their first pairs, then
 // their second pairs, then their MRCAs.
-static int coalescence_cmp(const Coalescence *coal1, const Coalescence *coal2) {
+int coalescence_cmp(const Coalescence *coal1, const Coalescence *coal2) {
     int ret = strcmp(coal1->seq1, coal2->seq1);
     if (ret) {
         return ret;
@@ -216,7 +218,7 @@ static int coalescence_cmp(const Coalescence *coal1, const Coalescence *coal2) {
     return strcmp(coal1->mrca, coal2->mrca);
 }
 
-static void coalescence_destruct(Coalescence *coal) {
+void coalescence_destruct(Coalescence *coal) {
     free(coal->seq1);
     free(coal->seq2);
     free(coal->mrca);
@@ -314,17 +316,17 @@ static void reportCoalescenceResults(CoalResult *aggregateResults, stHash *seqRe
     stHash_destructIterator(seqIt);
 }
 
-void compareMAFCoalescences(PhyloOptions *opts, stSet *legitSequences, stHash *sequenceLengthHash) {
+void compareMAFCoalescences(PhyloOptions *opts, stSet *legitSequences, stHash *sequenceLengthHash, bool onlyLeaves) {
     // Sample coalescences from the MAF (a pair of sequences from a
     // block and what genome they coalesce in)
     st_logInfo("Sampling coalescences\n");
     stSortedSet *coalescences = stSortedSet_construct3((int (*)(const void *, const void *)) coalescence_cmp, (void (*)(void *)) coalescence_destruct);
     double acceptProbability = ((double) opts->numSamples) / countPairsInMaf(opts->mafFile1, legitSequences);
-    sampleCoalescences(opts->mafFile1, coalescences, acceptProbability, legitSequences, sequenceLengthHash);
+    sampleCoalescences(opts->mafFile1, coalescences, acceptProbability, legitSequences, sequenceLengthHash, onlyLeaves);
     st_logInfo("Sampled %" PRIi64 " coalescences\n", stSortedSet_size(coalescences));
 
     st_logInfo("Finding matching coalescences\n");
-    stSortedSet *matchingCoalescences = findMatchingCoalescences(opts->mafFile2, coalescences, legitSequences);
+    stSortedSet *matchingCoalescences = findMatchingCoalescences(opts->mafFile2, coalescences, legitSequences, onlyLeaves);
     st_logInfo("Got %" PRIi64 " matching pairs\n", stSortedSet_size(matchingCoalescences));
 
     st_logInfo("Accumulating results\n");
