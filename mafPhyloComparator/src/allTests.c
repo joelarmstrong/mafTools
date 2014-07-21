@@ -27,12 +27,15 @@
 #include "CuTest.h"
 #include "sonLib.h"
 #include "test.blockTree.h"
+#include "test.coalescences.h"
 
 int main(void) {
     CuString *output = CuStringNew();
     CuSuite *suite = CuSuiteNew();
     CuSuite *blockTreeSuite = blockTree_TestSuite();
+    CuSuite *coalescencesSuite = coalescences_TestSuite();
     CuSuiteAddSuite(suite, blockTreeSuite);
+    CuSuiteAddSuite(suite, coalescencesSuite);
     CuSuiteRun(suite);
     CuSuiteSummary(suite, output);
     CuSuiteDetails(suite, output);

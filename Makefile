@@ -7,14 +7,16 @@ python_version_minor := $(word 2,${python_version_full})
 # These modules are dependent and are
 # only included if their depedencies exist!
 ifeq ($(wildcard ../sonLib/Makefile),)
+	PhyloComparator =
 	Comparator =
 	TransitiveClosure =
 	Stats =
 	ToFasta =
 	PairCoverage =
 	Coverage =
-$(warning Because dependency ../sonLib is missing mafComparator, mafTransitiveClosure, mafStats, mafToFastaStitcher, mafPairCoverage, mafCoverage will not be built / tested / cleaned. See README.md for information about dependencies.)
+$(warning Because dependency ../sonLib is missing mafComparator, mafPhyloComparator, mafTransitiveClosure, mafStats, mafToFastaStitcher, mafPairCoverage, mafCoverage will not be built / tested / cleaned. See README.md for information about dependencies.)
 else
+	PhyloComparator = mafPhyloComparator
 	Comparator = mafComparator
 	Stats = mafStats
 	ToFasta = mafToFastaStitcher
@@ -28,7 +30,7 @@ else
 endif # sonlib
 endif # pinches
 ##############################
-dependentModules= ${Comparator} ${TransitiveClosure} ${Stats} ${ToFasta} ${PairCoverage} ${Coverage}
+dependentModules= ${Comparator} ${PhyloComparator} ${TransitiveClosure} ${Stats} ${ToFasta} ${PairCoverage} ${Coverage}
 
 modules = lib ${dependentModules} mafValidator mafPositionFinder mafExtractor mafSorter mafDuplicateFilter mafFilter mafStrander mafRowOrderer
 

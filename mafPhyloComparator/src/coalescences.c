@@ -193,7 +193,7 @@ static stSortedSet *findMatchingCoalescences(char *mafFileName, stSortedSet *coa
 }
 
 // Compare two coalescences, by comparing their first pairs, then
-// their second pairs, then their MRCAs.
+// their second pair, but not their MRCAs.
 int coalescence_cmp(const Coalescence *coal1, const Coalescence *coal2) {
     int ret = strcmp(coal1->seq1, coal2->seq1);
     if (ret) {
@@ -215,7 +215,7 @@ int coalescence_cmp(const Coalescence *coal1, const Coalescence *coal2) {
         return -1;
     }
 
-    return strcmp(coal1->mrca, coal2->mrca);
+    return 0;
 }
 
 void coalescence_destruct(Coalescence *coal) {
@@ -297,7 +297,7 @@ static void buildCoalescenceResults(stSortedSet *sampledCoalescences, stSortedSe
 }
 
 static void reportCoalescenceResult(const char *tag, CoalResult *result, FILE *f) {
-    fprintf(f, "<%s seq=\"%s\" sampled=\"%" PRIu64 "\" matching=\"%" PRIu64 "\" identicalCoalescences=\"%" PRIu64 "\" earlyCoalescences=\"%" PRIu64 "\" lateCoalescences=\"%" PRIu64 "\" avgIdentical=\"%f\" avgEarly=\"%f\" avgLate=\"%f\">\n", tag, result->seq, result->sampledPairs, result->matchingCoalescences, result->identicalCoalescences, result->earlyCoalescences, result->lateCoalescences, ((float)result->identicalCoalescences)/result->matchingCoalescences, ((float)result->earlyCoalescences)/result->matchingCoalescences, ((float)result->lateCoalescences)/result->matchingCoalescences);
+    fprintf(f, "<%s seq=\"%s\" sampled=\"%" PRIu64 "\" matching=\"%" PRIu64 "\" identicalCoalescences=\"%" PRIu64 "\" earlyCoalescences=\"%" PRIu64 "\" lateCoalescences=\"%" PRIu64 "\" avgIdentical=\"%f\" avgEarly=\"%f\" avgLate=\"%f\" />\n", tag, result->seq, result->sampledPairs, result->matchingCoalescences, result->identicalCoalescences, result->earlyCoalescences, result->lateCoalescences, ((float)result->identicalCoalescences)/result->matchingCoalescences, ((float)result->earlyCoalescences)/result->matchingCoalescences, ((float)result->lateCoalescences)/result->matchingCoalescences);
 }
 
 static void reportCoalescenceResults(CoalResult *aggregateResults, stHash *seqResults, const char *mafFile1, const char *mafFile2, FILE *f) {
@@ -327,7 +327,7 @@ void compareMAFCoalescences(PhyloOptions *opts, stSet *legitSequences, stHash *s
 
     st_logInfo("Finding matching coalescences\n");
     stSortedSet *matchingCoalescences = findMatchingCoalescences(opts->mafFile2, coalescences, legitSequences, onlyLeaves);
-    st_logInfo("Got %" PRIi64 " matching pairs\n", stSortedSet_size(matchingCoalescences));
+    st_logInfo("Got %" PRIi64 " comparable coalescences\n", stSortedSet_size(matchingCoalescences));
 
     st_logInfo("Accumulating results\n");
     // Overall results.
@@ -349,4 +349,5 @@ void compareMAFCoalescences(PhyloOptions *opts, stSet *legitSequences, stHash *s
     stSortedSet_destruct(matchingCoalescences);
     coalResult_destruct(aggregateResults);
     stHash_destruct(seqResults);
+    fclose(outFile);
 }

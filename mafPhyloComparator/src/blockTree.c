@@ -187,6 +187,9 @@ stHash *getSeqToBlockRows(mafBlock_t *block, stTree *tree, bool onlyLeaves) {
             continue;
         }
 
+        if (stList_length(nodes) == 0) {
+            st_errAbort("Error at line number %" PRIu64 ": block has more sequence rows than implied by the block tree.");
+        }
         stTree *node = stList_pop(nodes);
         char *header = maf_mafLine_getSpecies(line);
         stSortedSet *sortedSet = stHash_search(ret, header);

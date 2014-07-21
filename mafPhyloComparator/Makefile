@@ -1,7 +1,7 @@
 include ../inc/common.mk
 binPath = ../bin
 extraAPI = src/blockTree.o src/coalescences.o ../lib/sharedMaf.o ../external/CuTest.a ../lib/common.o ../mafComparator/src/comparatorAPI.o ../mafComparator/src/comparatorRandom.o ${sonLibPath}/sonLib.a
-testAPI = ../external/CuTest.a ${extraAPI} src/test.blockTree.o
+testAPI = ${extraAPI} src/test.blockTree.o src/test.coalescences.o ../external/CuTest.a
 progs = $(foreach f, mafPhyloComparator, ${binPath}/$f)
 
 # TODO: do this properly
@@ -21,12 +21,12 @@ ${binPath}/%: src/%.c ${extraAPI}
 clean:
 	rm -f *.o ${progs} src/*.o && rm -rf ./test/ src/buildVersion.c src/buildVersion.h
 
-test: test/allTests
-	./test/allTests && rm -rf ./test/
+test: test/allTests test/mafPhyloComparator
+	./test/allTests && python2.7 src/test.mafPhyloComparator.py --verbose && rm -rf ./test/ && rmdir ./tempTestDir
 
-test/%: src/%.c ${testAPI} $(wildcard src/*.h)
+test/%: src/%.c ${testAPI}
 	@mkdir -p $(dir $@)
-	${cxx} -o $@.tmp $^ ${testFlags} ${extraIncFlags} ${lm}
+	${cxx} -o $@.tmp $^ ${testFlags} ${extraIncFlags} ../external/CuTest.a ${lm}
 	mv $@.tmp $@
 
 test/%.o: ../lib/%.c ../inc/%.h
